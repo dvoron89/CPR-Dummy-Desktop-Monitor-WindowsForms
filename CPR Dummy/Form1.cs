@@ -1,20 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
+using System.Data.SQLite;
 using System.Drawing;
+using System.Drawing.Printing;
 using System.IO.Ports;
+using System.Linq;
+using System.Media;
 using System.Net;
 using System.Net.Sockets;
-using System.Linq;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Security.Policy;
-using System.Data.SQLite;
-using System.Media;
-using System.Drawing.Printing;
 
 namespace ECG_PreProduction
 {
@@ -36,20 +33,8 @@ namespace ECG_PreProduction
         public DateTime TimeDrawingStarted;
 
         // INTs
-        public int FormWidth;
-        public int FormHeight;
-        public int PictureBoxWidth;
         public int PictureBoxHeight;
-        public int TrainingPictureBoxHeight;
-        public int TrainingPictureBoxWidth;
-
-        public int StartIndex;
-        public int EndIndex;
-
-        public int YellowZoneCount;
-        public int GreenZoneCount;
-        public int RedZoneCount;
-        public int TotalECGCount;
+        public int PictureBoxWidth;
 
         public int LastXPos = 0;
         public int PointIndex = 1;
@@ -66,8 +51,6 @@ namespace ECG_PreProduction
 
 
         // STRINGs
-        public string ECGString;
-
         public string DataBaseName = "\\Data.db";
         public string DummyOnlineSoundName = "\\dummyonline.snd";
         public string AppLocation;
@@ -75,21 +58,11 @@ namespace ECG_PreProduction
 
 
         // BOOLs
-        public bool ECGStarts = false;
-        public bool ECGEnds = false;
-        public bool SerialPortActive = false;
-        public bool WiFiActive = false;
         public bool DummyConnected = false;
         public bool DrawingInProgress = false;
         public bool ExamStarted = false;
 
         // LISTs
-        public List<int> IncomingData = new List<int>();
-        public List<int> PulseList = new List<int>();
-        public List<int> BreathList = new List<int>();
-        public List<string> ReadStreamList = new List<string>();
-        public List<int> HeartPointsList = new List<int>();
-        public List<int> LungsPointsList = new List<int>();
         public List<float> DistancePointsList = new List<float>();
         public List<float> PressurePointsList = new List<float>();
         public List<int> HealthyECGPoints = new List<int>();
@@ -97,14 +70,8 @@ namespace ECG_PreProduction
         public List<int> HealthyBreathPoints = new List<int>();
 
         // THREADs
-        public Thread ThreadIncomingData;
-        public Thread ThreadDrawECG;
-        public Thread ThreadReadStream;
-        public Thread ThreadSortData;
         public Thread ThreadWiFiStreamReader;
-        public Thread ThreadVisualizeStreamData;
         public Thread ThreadSerialStreamReader;
-        public Thread ThreadCustomVisualizer;
         public Thread ThreadDrawHealthyECG;
         public Thread ThreadDrawHealthyECGLongTerm;
         public Thread ThreadDrawStreamData;
@@ -204,9 +171,9 @@ namespace ECG_PreProduction
             buttonStartExam.Invoke(new Action(() => buttonStartExam.Enabled = true));
             buttonStopTraining.Invoke(new Action(() => buttonStopTraining.Enabled = false));
 
-            PulseGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
-            ECGGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
-            BreathGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
+            PulseGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
+            ECGGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
+            BreathGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
         }
 
         void ResetStatsVariables() // Set statistics at training sceen to original state
@@ -236,9 +203,6 @@ namespace ECG_PreProduction
 
         private void FormSetUp() // Runs at start. Setting VARs and preparing to work
         {
-            ThreadIncomingData = new Thread(new ThreadStart(ImcomingDataSimulation));
-            ThreadReadStream = new Thread(new ThreadStart(ReadStreamSimulation));
-            ThreadSortData = new Thread(new ThreadStart(SortStreamData));
             ThreadWiFiStreamReader = new Thread(new ThreadStart(WiFiStreamReader));
             ThreadSerialStreamReader = new Thread(new ThreadStart(SerialStreamReader));
             ThreadDrawHealthyECG = new Thread(new ThreadStart(DrawHealthyECG));
@@ -249,12 +213,6 @@ namespace ECG_PreProduction
 
             AppLocation = Application.StartupPath;
 
-            //ECGGraphics = ECG_Box.CreateGraphics();
-            //PulseGraphics = Pulse_Box.CreateGraphics();
-            //BreathGraphics = Breathe_Box.CreateGraphics();
-
-            //TrainingHeartBeatsGraphics = pictureBoxECG.CreateGraphics();
-
             ECGGraphics = pictureBoxECG.CreateGraphics();
             PulseGraphics = pictureBoxPulse.CreateGraphics();
             BreathGraphics = pictureBoxVents.CreateGraphics();
@@ -263,25 +221,14 @@ namespace ECG_PreProduction
 
             ResetStartScreen();
             ResetTrainingScreen();
-
-            StartVentsSound.Load();
-            BeepSound01.Load();
-            BeepSound02.Load();
-            StartCPRSound.Load();
-            CPRSuccessSound.Load();
-            CPRFailedSound.Load();
-            DummyOnlineSound.Load();
-            DummyOfflineSound.Load();
         }
 
         private void GetControlSizes() // Get sizes of control forms (picture boxes)
         {
-            FormWidth = this.Width;
-            FormHeight = this.Height;
-            //PictureBoxWidth = ECG_Box.Width;
-            //PictureBoxHeight = ECG_Box.Height;
-            TrainingPictureBoxHeight = pictureBoxECG.Height;
-            TrainingPictureBoxWidth = pictureBoxECG.Width;
+            //FormWidth = this.Width;
+            //FormHeight = this.Height;
+            PictureBoxHeight = pictureBoxECG.Height;
+            PictureBoxWidth = pictureBoxECG.Width;
         }
 
 
@@ -326,7 +273,6 @@ namespace ECG_PreProduction
         void EstablishSerialPortConnection() // Connect to dummy via USB cable and start reading thread
         {
             string[] SerialPortsNames = SerialPort.GetPortNames();
-            //string[] SerialPortsNames = new string[] { "COM1", "COM2", "COM3", "COM4", "COM5" };
             string TestLine;
 
             foreach (string Port in SerialPortsNames)
@@ -340,7 +286,6 @@ namespace ECG_PreProduction
                 try
                 {
                     CurrentPort.Open();
-                    //CurrentPort.DiscardInBuffer();
                     Thread.Sleep(1000);
                     TestLine = CurrentPort.ReadLine();
                     CurrentPort.Close();
@@ -348,7 +293,6 @@ namespace ECG_PreProduction
                     if (TestLine.Trim().StartsWith("_") && TestLine.Trim().EndsWith(";"))
                     {
                         DummyConnected = true;
-                        //SerialPortActive = true;
                         CurrentPort.Open();
                     }
                 }
@@ -553,7 +497,6 @@ namespace ECG_PreProduction
             HealthyECGPoints.Clear();
             HealthyBreathPoints.Clear();
             HealthyPulsePoints.Clear();
-            //int HeartBeatRate = 60;
             int HeartBeatRate = (int)numericUpDownCHSS.Value;
             int BreathRate = (int)Math.Round(HeartBeatRate / 4.3F);
 
@@ -634,15 +577,15 @@ namespace ECG_PreProduction
             {
                 PointsCounter = HealthyECGPoints.Count();
 
-                if (LastXPos >= TrainingPictureBoxWidth)
+                if (LastXPos >= PictureBoxWidth)
                 {
-                    ECGGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
-                    PulseGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
-                    BreathGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
+                    ECGGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
+                    PulseGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
+                    BreathGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
                     LastXPos = 0;
                 }
 
-                if (LastXPos >= TrainingPictureBoxWidth / 2)
+                if (LastXPos >= PictureBoxWidth / 2)
                 {
                     labelPulse.Invoke(new Action(() => labelPulse.Text = "0"));
                     labelVents.Invoke(new Action(() => labelVents.Text = "0"));
@@ -678,15 +621,15 @@ namespace ECG_PreProduction
                 }
 
                 // ECG graphics
-                startY = HealthyECGPoints[counter] * TrainingPictureBoxHeight / 100;
-                endY = HealthyECGPoints[counter + 1] * TrainingPictureBoxHeight / 100;
+                startY = HealthyECGPoints[counter] * PictureBoxHeight / 100;
+                endY = HealthyECGPoints[counter + 1] * PictureBoxHeight / 100;
                 startPoint = new Point(LastXPos, startY);
                 endPoint = new Point(LastXPos + 5, endY);
                 ECGGraphics.DrawLine(new Pen(Color.GreenYellow, 3), startPoint, endPoint);
 
                 // Pulse graphics
-                startY = HealthyPulsePoints[counter] * TrainingPictureBoxHeight / 100;
-                endY = HealthyPulsePoints[counter + 1] * TrainingPictureBoxHeight / 100;
+                startY = HealthyPulsePoints[counter] * PictureBoxHeight / 100;
+                endY = HealthyPulsePoints[counter + 1] * PictureBoxHeight / 100;
                 startPoint = new Point(LastXPos, startY);
                 endPoint = new Point(LastXPos + 5, endY);
                 PulseGraphics.DrawLine(new Pen(Color.Cyan, 3), startPoint, endPoint);
@@ -696,8 +639,8 @@ namespace ECG_PreProduction
                 {
                     lastBreathPoint = 0;
                 }
-                startY = HealthyBreathPoints[lastBreathPoint] * TrainingPictureBoxHeight / 100;
-                endY = HealthyBreathPoints[lastBreathPoint + 1] * TrainingPictureBoxHeight / 100;
+                startY = HealthyBreathPoints[lastBreathPoint] * PictureBoxHeight / 100;
+                endY = HealthyBreathPoints[lastBreathPoint + 1] * PictureBoxHeight / 100;
                 startPoint = new Point(LastXPos, startY);
                 endPoint = new Point(LastXPos + 5, endY);
                 BreathGraphics.DrawLine(new Pen(Color.Yellow, 3), startPoint, endPoint);
@@ -714,7 +657,7 @@ namespace ECG_PreProduction
 
                 Thread.Sleep(50);
 
-                if (!WiFiActive && !SerialPortActive && !DummyConnected)
+                if (!DummyConnected)
                 {
                     ResetTrainingScreen();
                     ThreadDrawHealthyECG.Suspend();
@@ -737,24 +680,24 @@ namespace ECG_PreProduction
             {
                 PointsCounter = HealthyECGPoints.Count();
 
-                if (LastXPos >= TrainingPictureBoxWidth)
+                if (LastXPos >= PictureBoxWidth)
                 {
-                    ECGGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
-                    PulseGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
-                    BreathGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
+                    ECGGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
+                    PulseGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
+                    BreathGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
                     LastXPos = 0;
                 }
 
                 // ECG graphics
-                startY = HealthyECGPoints[counter] * TrainingPictureBoxHeight / 100;
-                endY = HealthyECGPoints[counter + 1] * TrainingPictureBoxHeight / 100;
+                startY = HealthyECGPoints[counter] * PictureBoxHeight / 100;
+                endY = HealthyECGPoints[counter + 1] * PictureBoxHeight / 100;
                 startPoint = new Point(LastXPos, startY);
                 endPoint = new Point(LastXPos + 5, endY);
                 ECGGraphics.DrawLine(new Pen(Color.GreenYellow, 3), startPoint, endPoint);
 
                 // Pulse graphics
-                startY = HealthyPulsePoints[counter] * TrainingPictureBoxHeight / 100;
-                endY = HealthyPulsePoints[counter + 1] * TrainingPictureBoxHeight / 100;
+                startY = HealthyPulsePoints[counter] * PictureBoxHeight / 100;
+                endY = HealthyPulsePoints[counter + 1] * PictureBoxHeight / 100;
                 startPoint = new Point(LastXPos, startY);
                 endPoint = new Point(LastXPos + 5, endY);
                 PulseGraphics.DrawLine(new Pen(Color.Cyan, 3), startPoint, endPoint);
@@ -764,8 +707,8 @@ namespace ECG_PreProduction
                 {
                     lastBreathPoint = 0;
                 }
-                startY = HealthyBreathPoints[lastBreathPoint] * TrainingPictureBoxHeight / 100;
-                endY = HealthyBreathPoints[lastBreathPoint + 1] * TrainingPictureBoxHeight / 100;
+                startY = HealthyBreathPoints[lastBreathPoint] * PictureBoxHeight / 100;
+                endY = HealthyBreathPoints[lastBreathPoint + 1] * PictureBoxHeight / 100;
                 startPoint = new Point(LastXPos, startY);
                 endPoint = new Point(LastXPos + 5, endY);
                 BreathGraphics.DrawLine(new Pen(Color.Yellow, 3), startPoint, endPoint);
@@ -782,7 +725,7 @@ namespace ECG_PreProduction
 
                 Thread.Sleep(50);
 
-                if (!WiFiActive && !SerialPortActive && !DummyConnected)
+                if (!DummyConnected)
                 {
                     ResetTrainingScreen();
                     ThreadDrawHealthyECG.Suspend();
@@ -799,7 +742,6 @@ namespace ECG_PreProduction
             int StartY;
             int EndY;
 
-            float DistanceDeadPoint = 150.0F;
             float DistanceMax = 75.0F;
             float DistancePassed;
             float DistancePercent;
@@ -834,51 +776,43 @@ namespace ECG_PreProduction
                 if (DistancePointsList.Count() > PointIndex && PressurePointsList.Count() > PointIndex)
                 {
                     // if true, go on drawing graphs
-                    if (LastXPos >= TrainingPictureBoxWidth)
+                    if (LastXPos >= PictureBoxWidth)
                     {
-                        ECGGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
-                        PulseGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
-                        BreathGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
+                        ECGGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
+                        PulseGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
+                        BreathGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
 
                         // Drawing safe zones
                         PulseGraphics.FillRectangle(
                             BrushDarkBlue,
                             0,
-                            TrainingPictureBoxHeight * 20 / 100,
-                            TrainingPictureBoxWidth, TrainingPictureBoxHeight * 27 / 100);
+                            PictureBoxHeight * 20 / 100,
+                            PictureBoxWidth, PictureBoxHeight * 27 / 100);
                         BreathGraphics.FillRectangle
                             (BrushDarkBlue,
                             0,
-                            TrainingPictureBoxHeight * 10 / 100,
-                            TrainingPictureBoxWidth, TrainingPictureBoxHeight * 20 / 100);
+                            PictureBoxHeight * 10 / 100,
+                            PictureBoxWidth, PictureBoxHeight * 20 / 100);
 
                         LastXPos = 0;
                     }
 
                     #region Distance points to draw
 
-                    DistancePassed = DistanceDeadPoint - DistancePointsList[PointIndex - 1];
-                    if (DistancePassed < 0)
-                    {
-                        DistancePassed = 0;
-                    }
-                    DistancePercent = DistancePassed / DistanceMax * 100;
+                    DistancePercent = DistancePointsList[PointIndex - 1] / DistanceMax * 100;
 
-                    StartY = Convert.ToInt32(DistancePercent * TrainingPictureBoxHeight / 100);
+                    StartY = Convert.ToInt32(DistancePercent * PictureBoxHeight / 100);
 
-                    DistancePassed = DistanceDeadPoint - DistancePointsList[PointIndex];
-                    if (DistancePassed < 0)
-                    {
-                        DistancePassed = 0;
-                    }
-                    DistancePercent = DistancePassed / DistanceMax * 100;
+                    DistancePercent = DistancePointsList[PointIndex] / DistanceMax * 100;
 
-                    EndY = Convert.ToInt32(DistancePercent * TrainingPictureBoxHeight / 100);
+                    EndY = Convert.ToInt32(DistancePercent * PictureBoxHeight / 100);
 
-                    StartPoint = new Point(LastXPos, Math.Abs(StartY - TrainingPictureBoxHeight));
-                    EndPoint = new Point(LastXPos + 5, Math.Abs(EndY - TrainingPictureBoxHeight));
+                    StartPoint = new Point(LastXPos, Math.Abs(StartY - PictureBoxHeight));
+                    EndPoint = new Point(LastXPos + 5, Math.Abs(EndY - PictureBoxHeight));
 
                     PulseGraphics.DrawLine(new Pen(Color.Cyan, 3), StartPoint, EndPoint);
+
+                    DistancePassed = DistancePointsList[PointIndex];
 
                     #endregion
 
@@ -958,7 +892,7 @@ namespace ECG_PreProduction
                     }
                     PressurePercent = Pressure / PressureMax * 100;
 
-                    StartY = Convert.ToInt32(PressurePercent * TrainingPictureBoxHeight / 100);
+                    StartY = Convert.ToInt32(PressurePercent * PictureBoxHeight / 100);
 
                     Pressure = PressurePointsList[PointIndex];
                     if (Pressure > PressureMax)
@@ -967,10 +901,10 @@ namespace ECG_PreProduction
                     }
                     PressurePercent = Pressure / PressureMax * 100;
 
-                    EndY = Convert.ToInt32(PressurePercent * TrainingPictureBoxHeight / 100);
+                    EndY = Convert.ToInt32(PressurePercent * PictureBoxHeight / 100);
 
-                    StartPoint = new Point(LastXPos, Math.Abs(StartY - TrainingPictureBoxHeight));
-                    EndPoint = new Point(LastXPos + 5, Math.Abs(EndY - TrainingPictureBoxHeight));
+                    StartPoint = new Point(LastXPos, Math.Abs(StartY - PictureBoxHeight));
+                    EndPoint = new Point(LastXPos + 5, Math.Abs(EndY - PictureBoxHeight));
 
                     BreathGraphics.DrawLine(new Pen(Color.Yellow, 3), StartPoint, EndPoint);
 
@@ -1042,11 +976,11 @@ namespace ECG_PreProduction
 
                     #region ECGDeadLine to draw
 
-                    StartY = Convert.ToInt32(30 * TrainingPictureBoxHeight / 100);
-                    EndY = Convert.ToInt32(30 * TrainingPictureBoxHeight / 100);
+                    StartY = Convert.ToInt32(30 * PictureBoxHeight / 100);
+                    EndY = Convert.ToInt32(30 * PictureBoxHeight / 100);
 
-                    StartPoint = new Point(LastXPos, Math.Abs(StartY - TrainingPictureBoxHeight));
-                    EndPoint = new Point(LastXPos + 5, Math.Abs(EndY - TrainingPictureBoxHeight));
+                    StartPoint = new Point(LastXPos, Math.Abs(StartY - PictureBoxHeight));
+                    EndPoint = new Point(LastXPos + 5, Math.Abs(EndY - PictureBoxHeight));
 
                     ECGGraphics.DrawLine(new Pen(Color.GreenYellow, 3), StartPoint, EndPoint);
 
@@ -1205,9 +1139,9 @@ namespace ECG_PreProduction
 
                         ResetStatsVariables();
 
-                        PulseGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
-                        ECGGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
-                        BreathGraphics.FillRectangle(BrushDarkNight, 0, 0, TrainingPictureBoxWidth, TrainingPictureBoxHeight);
+                        PulseGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
+                        ECGGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
+                        BreathGraphics.FillRectangle(BrushDarkNight, 0, 0, PictureBoxWidth, PictureBoxHeight);
 
 
                         DrawingInProgress = false;
@@ -1260,10 +1194,6 @@ namespace ECG_PreProduction
             }
             if (ThreadSoundBeeps.ThreadState != ThreadState.Suspended && ThreadSoundBeeps.ThreadState != ThreadState.Unstarted)
             {
-                //BeepSound01.Stop();
-                //BeepSound01.Dispose();
-                //StartVentsSound.Stop();
-                //StartVentsSound.Dispose();
                 ThreadSoundBeeps.Suspend();
             }
             if (ThreadDrawHealthyECGLongTerm.ThreadState != ThreadState.Suspended && ThreadDrawHealthyECGLongTerm.ThreadState != ThreadState.Unstarted)
@@ -1342,27 +1272,6 @@ namespace ECG_PreProduction
 
         void SoundBeeps()
         {
-            //int counter = 1;
-            //while (true)
-            //{
-            //    if (PointIndex == 1)
-            //    {
-            //        counter = 1;
-            //    }
-            //    if (counter > 30)
-            //    {
-            //        counter = 1;
-            //    }
-            //    if (counter == 1)
-            //    {
-            //        StartVentsSound.Play();
-            //        Thread.Sleep(8000);
-            //    }
-            //    BeepSound01.Play();
-            //    Thread.Sleep(600);
-            //    counter++;
-            //}
-
             while (true)
             {
                 for (int i = 1; i <= 30; i++)
@@ -1371,58 +1280,6 @@ namespace ECG_PreProduction
                     Thread.Sleep(600);
                 }
                 StartVentsSound.PlaySync();
-            }
-        }
-
-
-        //METHODS TO SIMULATE ACTIVITY
-
-        void ImcomingDataSimulation()
-        {
-            Random random = new Random();
-            while (true)
-            {
-                IncomingData.Add(random.Next(0, 100));
-                PulseList.Add(random.Next(10, 90));
-                BreathList.Add(random.Next(0, 80));
-                Thread.Sleep(50);
-            }
-        }
-
-        void ReadStreamSimulation()
-        {
-            Random random = new Random();
-            string data;
-            while (true)
-            {
-                data = "beat" + random.Next(0, 100).ToString();
-                ReadStreamList.Add(data);
-                data = "breath" + random.Next(0, 100).ToString();
-                ReadStreamList.Add(data);
-                Thread.Sleep(50);
-            }
-        }
-
-        void SortStreamData()
-        {
-            int counter = ReadStreamList.Count();
-            string data;
-
-            while (true)
-            {
-                if (ReadStreamList.Count() > counter)
-                {
-                    counter++;
-                    data = ReadStreamList.Last<string>();
-                    if (data.StartsWith("beat"))
-                    {
-                        data = data.TrimStart('b', 'e', 'a', 't');
-                    }
-                    if (data.StartsWith("breath"))
-                    {
-                        data = data.TrimStart('b', 'r', 'e', 'a', 't', 'h');
-                    }
-                }
             }
         }
 
@@ -1436,15 +1293,6 @@ namespace ECG_PreProduction
         private void ButtonWiredConnection_Click(object sender, EventArgs e) // Connect dummy USB cable
         {
             EstablishSerialPortConnection();
-        }
-
-        private void button7_Click(object sender, EventArgs e) // Show all available serial ports
-        {
-            //string[] ports = SerialPort.GetPortNames();
-            //foreach (var port in ports)
-            //{
-            //    MessageBox.Show(port.ToString());
-            //}
         }
 
 
@@ -1537,9 +1385,6 @@ namespace ECG_PreProduction
 
         private void Form1_FormClosed(object sender, FormClosedEventArgs e)
         {
-            ThreadIncomingData.IsBackground = true;
-            ThreadReadStream.IsBackground = true;
-            ThreadSortData.IsBackground = true;
             ThreadWiFiStreamReader.IsBackground = true;
             ThreadSerialStreamReader.IsBackground = true;
             ThreadDrawHealthyECG.IsBackground = true;
@@ -1559,7 +1404,6 @@ namespace ECG_PreProduction
 
         private void tabPage2_Enter(object sender, EventArgs e)
         {
-            //MessageBox.Show("ACTIVATED");
             ReadDB();
         }
 
